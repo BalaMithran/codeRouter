@@ -1,0 +1,10 @@
+{
+  "name": "coderouter",
+  "version": "0.1.0",
+  "description": "Intelligent provider layer behind OpenCode — OpenAI-compatible gateway",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  }
+}
