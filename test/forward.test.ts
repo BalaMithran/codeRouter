@@ -14,7 +14,7 @@ beforeAll(async () => {
     },
   });
   process.env.CODEROUTER_UPSTREAM = `${mock.url}v1/chat/completions`;
-  process.env.OPENROUTER_API_KEY = "test-key";
+  process.env.CODEROUTER_API_KEY = "test-key"; // must set the winning var — bun auto-loads .env
   ({ forward } = await import("../src/forward"));
 });
 

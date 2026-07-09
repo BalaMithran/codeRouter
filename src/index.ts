@@ -1,7 +1,7 @@
 import { forward } from "./forward";
 
-if (!process.env.OPENROUTER_API_KEY) {
-  console.error("OPENROUTER_API_KEY not set (put it in .env)");
+if (!process.env.CODEROUTER_API_KEY && !process.env.OPENROUTER_API_KEY) {
+  console.error("no upstream API key: set CODEROUTER_API_KEY (or OPENROUTER_API_KEY) in .env");
   process.exit(1);
 }
 
