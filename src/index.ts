@@ -26,11 +26,11 @@ async function handle(req: Request): Promise<Response> {
     return Response.json({ error: { message: "invalid JSON body" } }, { status: 400 });
   }
   const requested = String(body.model ?? "");
-  const route = resolve(requested, body, cfg);
+  const route = await resolve(requested, body, cfg);
   body.model = route.model;
 
   const res = await forward(JSON.stringify(body), cfg.providers[route.provider]);
-  const prefix = `${requested} -> ${route.provider}/${route.model} ${res.status}`;
+  const prefix = `${route.privacy ? "[privacy] " : ""}${requested} -> ${route.provider}/${route.model} ${res.status}`;
   if (res.body) {
     const [toClient, toLog] = res.body.tee();
     logUsage(prefix, new Response(toLog));

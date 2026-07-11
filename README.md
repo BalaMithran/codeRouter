@@ -3,10 +3,10 @@
 Intelligent provider layer behind [OpenCode](https://opencode.ai). OpenCode keeps the
 terminal UX, agent loop, and tools; CodeRouter decides which model executes each task.
 
-**Milestone 2 (current):** virtual models + routing. OpenCode asks for `auto` /
-`cheap` / `premium` / `offline`; CodeRouter resolves the real provider+model per
-request and forwards. Provider contract in
-[docs/opencode-integration.md](docs/opencode-integration.md).
+**Milestone 3 (current):** privacy engine + LLM-classifier routing. OpenCode asks for
+`auto` / `cheap` / `premium` / `offline`; CodeRouter resolves the real provider+model
+per request. Requests touching protected paths never leave the machine. Provider
+contract in [docs/opencode-integration.md](docs/opencode-integration.md).
 
 ```
 OpenCode  →  CodeRouter :8787  →  openai  (gpt-4.1 / gpt-4.1-mini)
@@ -28,15 +28,32 @@ ollama pull llama3.1:8b
 
 | id | routes to | picked by |
 |----|-----------|-----------|
-| `auto` | cheap or premium | heuristic: no tools→cheap; +2 if >32k chars; +1 if >12 messages; ±keywords; ≥2 → premium |
+| `auto` | cheap or premium | gpt-4.1-nano classifies the request (~300ms, 3s timeout); any failure falls back to the keyword/size heuristic |
 | `cheap` | openai/gpt-4.1-mini | static |
 | `premium` | openai/gpt-4.1 | static |
 | `offline` | ollama/llama3.1:8b | static |
 
 Bare ids (`gpt-4.1`) pass through to `default_provider` unchanged; `provider/model`
 ids route to that provider explicitly. All mappings + thresholds in
-[coderouter.yaml](coderouter.yaml). Strategy is a pluggable function
-(`src/strategy.ts`) — an LLM-classifier variant is the M3 slot.
+[coderouter.yaml](coderouter.yaml). Strategies are pluggable functions
+(`src/strategy.ts`): `llm-classifier` (default) or `heuristic`.
+
+## Privacy
+
+`privacy.paths` globs in [coderouter.yaml](coderouter.yaml) (`/auth/**`,
+`**/secrets/**`, …) are matched against the serialized request body — file paths in
+tool args, bash commands, prose, and tool results all count. A match forces the
+request to `privacy.target` (local Ollama), **overriding everything** including
+explicit `premium`/`gpt-4.1` picks, and short-circuits before the classifier so
+protected content is never sent to the cloud even for classification. Fail closed:
+local model down → 502, never a cloud fallback. Once protected content enters a
+session, every later request matches too (full history is re-sent) — taint is sticky.
+
+Semantics: gitignore-style; leading `/` or `**/` matches at any path boundary, so
+relative paths (`secrets/token.txt`) trigger rules too. Over-matching (a path-shaped
+string in prose) routes local — the safe direction. **Known limit:** detection is
+path-string based; secret *content* with no matching path won't trigger (content
+scanning is a future milestone).
 
 ## Wire up OpenCode
 
@@ -66,6 +83,6 @@ cost tracking.
 
 ## Deferred (deliberately)
 
-- Privacy engine (path rules → force local) — M3
-- LLM-classifier strategy — M3
+- Budget engine (daily spend cap) — M4
+- Secret-content detection + redaction — future (privacy today is path-based)
 - Hono, provider registry classes, dashboards — when a second implementation exists

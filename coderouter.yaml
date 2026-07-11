@@ -16,9 +16,22 @@ virtual_models:
   offline: ollama/llama3.1:8b
   auto: auto                    # sentinel: strategy picks cheap | premium
 
+privacy:
+  # Matching requests ALWAYS route here — overrides explicit picks (even premium/gpt-4.1).
+  # Fail-closed: if ollama is down the request 502s; never falls back to cloud.
+  # Detection is path-string based: globs matched anywhere in the serialized request body.
+  target: ollama/llama3.1:8b
+  paths:
+    - /auth/**
+    - /payment/**
+    - "**/secrets/**"
+
 strategy:
-  name: heuristic               # M3 slot: llm-classifier, same function signature
-  thresholds:
+  name: llm-classifier          # alternative: heuristic (no LLM call, thresholds only)
+  classifier:
+    target: openai/gpt-4.1-nano
+    timeout_ms: 3000            # any failure/timeout/garbage -> silent heuristic fallback
+  thresholds:                   # heuristic config (also the classifier's fallback path)
     long_chars: 32000           # ~8k tokens; above this the task carries real context
     many_messages: 12
     premium_score: 2            # score >= this -> premium

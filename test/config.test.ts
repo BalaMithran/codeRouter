@@ -30,3 +30,20 @@ test("virtual model targeting unknown provider throws", () => {
 test("missing file names the path", () => {
   expect(() => loadConfig("/nonexistent/coderouter.yaml")).toThrow("config not found");
 });
+
+test("privacy target with unknown provider throws", () => {
+  const p = write(`default_provider: openai\nproviders:\n  openai: { baseURL: https://x }\nvirtual_models: {}\nprivacy: { target: nope/m, paths: ["/auth/**"] }\nstrategy: { name: heuristic, thresholds: { long_chars: 1, many_messages: 1, premium_score: 1 } }\n`);
+  expect(() => loadConfig(p)).toThrow('unknown provider "nope"');
+});
+
+test("classifier target with unknown provider throws", () => {
+  const p = write(`default_provider: openai\nproviders:\n  openai: { baseURL: https://x }\nvirtual_models: {}\nstrategy: { name: llm-classifier, classifier: { target: nope/nano }, thresholds: { long_chars: 1, many_messages: 1, premium_score: 1 } }\n`);
+  expect(() => loadConfig(p)).toThrow('unknown provider "nope"');
+});
+
+test("privacy paths compile to patterns", () => {
+  const p = write(`default_provider: openai\nproviders:\n  openai: { baseURL: https://x }\n  ollama: { baseURL: http://l }\nvirtual_models: {}\nprivacy: { target: ollama/m, paths: ["/auth/**", "**/secrets/**"] }\nstrategy: { name: heuristic, thresholds: { long_chars: 1, many_messages: 1, premium_score: 1 } }\n`);
+  const cfg = loadConfig(p);
+  expect(cfg.privacy!.patterns).toHaveLength(2);
+  expect(cfg.privacy!.patterns[0]!.test('"filePath":"/repo/auth/x.ts"')).toBe(true);
+});
