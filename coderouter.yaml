@@ -1,0 +1,24 @@
+# CodeRouter config. Dollar-brace env references substitute at startup (missing var = error).
+default_provider: openai        # bare model ids forward here unchanged (M1 back-compat)
+
+providers:
+  openai:
+    baseURL: https://api.openai.com/v1
+    apiKey: ${CODEROUTER_OPENAI_KEY}   # namespaced: a global OPENAI_API_KEY in shell rc would shadow .env
+  ollama:
+    baseURL: http://localhost:11434/v1
+    # no apiKey — ollama ignores auth
+
+virtual_models:
+  cheap: openai/gpt-4.1-mini
+  premium: openai/gpt-4.1
+  # llama3.1:8b over qwen2.5-coder:7b: qwen emits tool calls as text, OpenCode needs native tool_calls
+  offline: ollama/llama3.1:8b
+  auto: auto                    # sentinel: strategy picks cheap | premium
+
+strategy:
+  name: heuristic               # M3 slot: llm-classifier, same function signature
+  thresholds:
+    long_chars: 32000           # ~8k tokens; above this the task carries real context
+    many_messages: 12
+    premium_score: 2            # score >= this -> premium

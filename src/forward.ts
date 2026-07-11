@@ -1,19 +1,25 @@
-// ponytail: single passthrough fn — the future Provider interface implements this
-// same signature when routing lands; registry/selection slots in at the call site.
-const UPSTREAM = process.env.CODEROUTER_UPSTREAM ?? "https://openrouter.ai/api/v1/chat/completions";
-const API_KEY = process.env.CODEROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY;
+import type { Provider } from "./config";
 
-export async function forward(req: Request): Promise<Response> {
-  const upstream = await fetch(UPSTREAM, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${API_KEY}`,
-      "content-type": req.headers.get("content-type") ?? "application/json",
-      // no gzip: keeps the passthrough byte-exact
-      "accept-encoding": "identity",
-    },
-    body: await req.arrayBuffer(),
-  });
+// ponytail: still one passthrough fn — routing picks the provider at the call site.
+export async function forward(body: string, provider: Provider): Promise<Response> {
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${provider.baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...(provider.apiKey ? { authorization: `Bearer ${provider.apiKey}` } : {}),
+        "content-type": "application/json",
+        // no gzip: keeps the passthrough byte-exact
+        "accept-encoding": "identity",
+      },
+      body,
+    });
+  } catch (e) {
+    return Response.json(
+      { error: { message: `upstream unreachable: ${provider.baseURL} (${e instanceof Error ? e.message : e})` } },
+      { status: 502 },
+    );
+  }
   const headers = new Headers(upstream.headers);
   // Bun's fetch auto-decompresses; stale encoding/length headers would corrupt the client read
   headers.delete("content-encoding");

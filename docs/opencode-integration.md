@@ -110,11 +110,13 @@ which contain the right substrings naturally.
 - For a virtual model whose backing changes per request, OpenCode compacts against the
   *static* configured limit — pin `limit.context` to the smallest possible backend.
 
-## 6. CodeRouter M1 invariants
+## 6. CodeRouter invariants
 
-1. **Byte-level passthrough.** Request body buffered and forwarded unchanged; response
-   body (SSE or JSON) streamed back untouched. Never parse and re-emit SSE — any
-   reserialization risks mangling tool_call deltas or the usage chunk.
+1. **Response byte-level passthrough.** Response body (SSE or JSON) streamed back
+   untouched. Never parse and re-emit SSE — any reserialization risks mangling
+   tool_call deltas or the usage chunk. (M2 change: the REQUEST is parsed to read and
+   rewrite `model` for routing, then re-serialized — sanctioned because AI-SDK-produced
+   JSON round-trips stably; the response side remains untouched.)
 2. **Header swap only.** Replace `Authorization` with the upstream key; send
    `accept-encoding: identity` upstream and drop `content-encoding`/`content-length`
    from the response (Bun's fetch auto-decompresses; stale headers corrupt the read).
