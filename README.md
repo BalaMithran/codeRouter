@@ -18,7 +18,7 @@ OpenCode  →  CodeRouter :8787  →  openai  (gpt-4.1 / gpt-4.1-mini)
 
 - [OpenCode](https://opencode.ai) already installed — CodeRouter is a provider for it, not a standalone tool
 - Docker + Docker Compose ([Docker Desktop](https://www.docker.com/products/docker-desktop/) includes both)
-- An OpenAI API key — cloud requests use real, billed API usage
+- An OpenAI API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys) — cloud requests use real, billed API usage. A brand-new/unverified org can get `model_not_found` on some models (e.g. gpt-5); the models this config uses by default (gpt-4.1 family) work on an unverified org
 - ~10GB free RAM allotted to Docker for the local/offline model (see prerequisite note below)
 
 ## Quickstart (Docker)
@@ -29,6 +29,9 @@ cp .env.example .env            # edit CODEROUTER_OPENAI_KEY
 docker compose up -d            # builds coderouter, starts ollama, pulls the model
 curl localhost:8787/health      # -> ok
 ```
+
+`docker compose ps` should show three containers `Up`/`healthy` (`coderouter`, `ollama`,
+`ollama-pull` — the last one exits once the model finishes pulling, that's expected).
 
 First run downloads the ollama image and pulls `llama3.1:8b` (~4.9GB) — `docker compose
 logs -f ollama-pull` to watch progress. It's cached in a named volume, so later
@@ -66,26 +69,45 @@ locally, regardless of which id you asked for.
 
 ## Wire up OpenCode
 
-Add to `~/.config/opencode/opencode.jsonc`:
+Open `~/.config/opencode/opencode.jsonc`. **If the file doesn't exist yet or is
+empty**, paste this whole thing in:
 
 ```jsonc
-"provider": {
-  "coderouter": {
-    "npm": "@ai-sdk/openai-compatible",
-    "name": "CodeRouter",
-    "options": { "baseURL": "http://localhost:8787/v1", "apiKey": "coderouter-local" },
-    "models": {
-      "auto":    { "name": "Auto",    "tool_call": true, "limit": { "context": 1047576, "output": 32768 }, "cost": { "input": 2, "output": 8 } },
-      "cheap":   { "name": "Cheap",   "tool_call": true, "limit": { "context": 1047576, "output": 32768 }, "cost": { "input": 0.4, "output": 1.6 } },
-      "premium": { "name": "Premium", "tool_call": true, "limit": { "context": 1047576, "output": 32768 }, "cost": { "input": 2, "output": 8 } },
-      "offline": { "name": "Offline", "tool_call": true, "limit": { "context": 32768, "output": 8192 }, "cost": { "input": 0, "output": 0 } }
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "coderouter": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "CodeRouter",
+      "options": { "baseURL": "http://localhost:8787/v1", "apiKey": "coderouter-local" },
+      "models": {
+        "auto":    { "name": "Auto",    "tool_call": true, "limit": { "context": 1047576, "output": 32768 }, "cost": { "input": 2, "output": 8 } },
+        "cheap":   { "name": "Cheap",   "tool_call": true, "limit": { "context": 1047576, "output": 32768 }, "cost": { "input": 0.4, "output": 1.6 } },
+        "premium": { "name": "Premium", "tool_call": true, "limit": { "context": 1047576, "output": 32768 }, "cost": { "input": 2, "output": 8 } },
+        "offline": { "name": "Offline", "tool_call": true, "limit": { "context": 32768, "output": 8192 }, "cost": { "input": 0, "output": 0 } }
+      }
     }
   }
 }
 ```
 
+**If you already have an `opencode.jsonc`** with other providers configured, only add
+the `"coderouter": {...}` entry into your existing `"provider"` object — don't
+replace the whole file, and don't add a second top-level `"provider"` key.
+
 Model ids must be declared here — OpenCode never calls `/v1/models`. Set real
 `limit`/`cost` values: zeros silently disable compaction and cost tracking.
+
+**Verify it's wired up:** `opencode models coderouter` should list
+`coderouter/auto`, `coderouter/cheap`, `coderouter/premium`, `coderouter/offline`.
+
+**Use it:** inside an `opencode` session, type `/models` and pick one of the four —
+or one-shot from the terminal: `opencode run -m coderouter/auto "..."`.
+
+**Which file do I actually edit?** `opencode.jsonc` above — once, during setup, so
+OpenCode knows CodeRouter exists. `.env` — once, to add your OpenAI key. `coderouter.yaml`
+— never, unless you want to customize routing rules or add models later (see
+[How routing works](#how-routing-works)).
 
 ## Local development
 
