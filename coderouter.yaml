@@ -6,7 +6,7 @@ providers:
     baseURL: https://api.openai.com/v1
     apiKey: ${CODEROUTER_OPENAI_KEY}   # namespaced: a global OPENAI_API_KEY in shell rc would shadow .env
   ollama:
-    baseURL: http://localhost:11434/v1
+    baseURL: ${CODEROUTER_OLLAMA_URL}   # bare-metal: localhost; docker-compose overrides to the ollama service
     # no apiKey — ollama ignores auth
 
 virtual_models:

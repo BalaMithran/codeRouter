@@ -1,0 +1,51 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      # default 4096 silently truncates OpenCode's prompts — baked in here so nobody
+      # has to rediscover this the hard way (we did, on bare-metal).
+      OLLAMA_CONTEXT_LENGTH: "32768"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published to the host on purpose: coderouter reaches it over the compose
+    # network as `ollama`; publishing 11434 would also collide with a host Ollama.
+    # GPU: uncomment to pass through an NVIDIA GPU (falls back to CPU otherwise).
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "llama3.1:8b"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama-data:/root/.ollama
+
+  coderouter:
+    build: .
+    env_file: .env
+    environment:
+      CODEROUTER_OLLAMA_URL: http://ollama:11434/v1
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./coderouter.yaml:/app/coderouter.yaml:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama-data:
