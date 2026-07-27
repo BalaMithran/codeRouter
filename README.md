@@ -1,17 +1,25 @@
 # CodeRouter
 
-Intelligent provider layer behind [OpenCode](https://opencode.ai). OpenCode keeps the
-terminal UX, agent loop, and tools; CodeRouter decides which model executes each task.
+A drop-in gateway for [OpenCode](https://opencode.ai) that automatically picks which
+AI model handles each coding task — a cheap/fast model for simple edits, a powerful
+one for hard problems, and your own machine for anything touching secrets or auth
+code — so you don't have to think about it or manually switch models yourself.
 
-**Milestone 3 (current):** privacy engine + LLM-classifier routing. OpenCode asks for
-`auto` / `cheap` / `premium` / `offline`; CodeRouter resolves the real provider+model
-per request. Requests touching protected paths never leave the machine. Provider
-contract in [docs/opencode-integration.md](docs/opencode-integration.md).
+OpenCode keeps the terminal UX, agent loop, and tools unchanged; CodeRouter sits
+between OpenCode and the AI providers and makes the routing decision. Full request/
+response contract in [docs/opencode-integration.md](docs/opencode-integration.md).
 
 ```
 OpenCode  →  CodeRouter :8787  →  openai  (gpt-4.1 / gpt-4.1-mini)
-                                  ollama  (llama3.1:8b, local)
+                                  ollama  (llama3.1:8b, local — for offline/privacy)
 ```
+
+## Prerequisites
+
+- [OpenCode](https://opencode.ai) already installed — CodeRouter is a provider for it, not a standalone tool
+- Docker + Docker Compose ([Docker Desktop](https://www.docker.com/products/docker-desktop/) includes both)
+- An OpenAI API key — cloud requests use real, billed API usage
+- ~10GB free RAM allotted to Docker for the local/offline model (see prerequisite note below)
 
 ## Quickstart (Docker)
 
@@ -34,6 +42,27 @@ Memory) to 10GB+, or the offline/privacy routes will fail with an OOM error whil
 
 To change routing/models without rebuilding the image, edit `coderouter.yaml` on the
 host and `docker compose restart coderouter` — it's bind-mounted, not baked in.
+
+## How routing works
+
+Ask OpenCode for one of these model ids and CodeRouter resolves it to a real model
+per request:
+
+| id | routes to | picked by |
+|----|-----------|-----------|
+| `auto` | cheap or premium | gpt-4.1-nano classifies the request (~300ms, 3s timeout); any failure falls back to the keyword/size heuristic |
+| `cheap` | openai/gpt-4.1-mini | static |
+| `premium` | openai/gpt-4.1 | static |
+| `offline` | ollama/llama3.1:8b | static, runs on your machine |
+
+Bare ids (`gpt-4.1`) pass through unchanged; `provider/model` ids (`openai/gpt-4.1`)
+route to that provider explicitly. All mappings + thresholds live in
+[coderouter.yaml](coderouter.yaml) — edit and restart, no code changes needed.
+Strategies are pluggable functions (`src/strategy.ts`): `llm-classifier` (default) or
+`heuristic`.
+
+Requests that touch a protected path (see [Privacy](#privacy) below) always run
+locally, regardless of which id you asked for.
 
 ## Wire up OpenCode
 
@@ -80,20 +109,6 @@ llama3.1:8b`. `CODEROUTER_OLLAMA_URL` in `.env` should stay `http://localhost:11
 | `CODEROUTER_OPENAI_KEY` | yes | OpenAI API key, substituted into `coderouter.yaml` |
 | `CODEROUTER_OLLAMA_URL` | yes | Ollama base URL; docker-compose sets this automatically, only matters bare-metal |
 | `PORT` | no | gateway port, default 8787 |
-
-## Virtual models
-
-| id | routes to | picked by |
-|----|-----------|-----------|
-| `auto` | cheap or premium | gpt-4.1-nano classifies the request (~300ms, 3s timeout); any failure falls back to the keyword/size heuristic |
-| `cheap` | openai/gpt-4.1-mini | static |
-| `premium` | openai/gpt-4.1 | static |
-| `offline` | ollama/llama3.1:8b | static |
-
-Bare ids (`gpt-4.1`) pass through to `default_provider` unchanged; `provider/model`
-ids route to that provider explicitly. All mappings + thresholds in
-[coderouter.yaml](coderouter.yaml). Strategies are pluggable functions
-(`src/strategy.ts`): `llm-classifier` (default) or `heuristic`.
 
 ## Privacy
 
